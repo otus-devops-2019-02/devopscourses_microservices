@@ -30,9 +30,9 @@ DOCKER HUB REGISTRATION
 Login succeeded
 docker tag reddit:latest devopscourses/otus-reddit:1.0
 docker push devopscourse/otus-reddit:1.0
-docker run --name reddit -d -p 9292:9292 avzhalnin/otus-reddit:1.0
+docker run --name reddit -d -p 9292:9292 devopscourses/otus-reddit:1.0
 It works!!! http://localhost:9292/
-docker inspect avzhalnin/otus-reddit:1.0 -f '{{.ContainerConfig.Cmd}}' [/bin/sh -c #(nop) CMD ["/start.sh"]]
+docker inspect devopscourses/otus-reddit:1.0 -f '{{.ContainerConfig.Cmd}}' [/bin/sh -c #(nop) CMD ["/start.sh"]]
 docker exec -it reddit bash
 
 DESTROY
