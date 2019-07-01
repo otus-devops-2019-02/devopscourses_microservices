@@ -1,0 +1,97 @@
+version: "3.3"
+
+volumes:
+  reddit-db:
+  prometheus_data:
+
+networks:
+  reddit:
+  promit-net:
+
+services:
+  post-db:
+    image: mongo:3.2
+    container_name: post-db
+    restart: always
+    networks:
+      promit-net:
+        aliases:
+          - post_db
+          - comment_db
+      reddit:
+        aliases:
+          - post_db
+          - comment_db
+    volumes:
+      - ./reddit-db:/data/db
+
+  post:
+    image: ${USER_NAME}/post:${POST_VERSION}
+    container_name: post
+    restart: always
+    networks:
+      promit-net:
+        aliases:
+          - post
+      reddit:
+        aliases:
+          - post
+
+  comment:
+    image: ${USER_NAME}/comment:${COMMENT_VERSION}
+    container_name: comment
+    restart: always
+    networks:
+      promit-net:
+        aliases:
+          - comment
+      reddit:
+        aliases:
+          - comment
+
+  ui:
+    image: ${USER_NAME}/ui:${UI_VERSION}
+    container_name: ui
+    restart: always
+    networks:
+      promit-net:
+        aliases:
+          - ui
+      reddit:
+        aliases:
+          - ui
+    ports:
+      - 9292:9292
+
+  prometheus:
+    image: ${USER_NAME}/prometheus
+    container_name: prometheus
+    restart: always
+    networks:
+      promit-net:
+    ports:
+      - '9090:9090'
+    volumes:
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention=1d'
+
+  node-exporter:
+    image: prom/node-exporter:v0.15.2
+    user: root
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.ignored-mount-points="^/(sys|proc|dev|host|etc)($$|/)"'
+    networks:  
+      promit-net:
+        aliases:
+          - node-exporter
+
+

@@ -1,0 +1,10 @@
+.ebv
+*.tfstate
+*.tfstate.*.backup
+*.tfstate.backup
+*.tfvars
+*.retry
+.terraform/
+packer/variables.json
+jdauphant.nginx
+vault.key
