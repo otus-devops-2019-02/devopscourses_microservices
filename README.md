@@ -65,3 +65,24 @@ for i in ui comment post prometheus; do echo $i; docker push devopscourses/$i; d
 
 ###Не работали healthchekи при поднятых таргетах - косяки в настройки сети докера, нужно правильно настраивать алиасы\либо вообще без них
 
+
+###ПАМЯТКА##############################
+$ export GOOGLE_PROJECT=_ваш-проект_
+
+# Создать докер хост
+docker-machine create --driver google \
+    --google-machine-image https://www.googleapis.com/compute/v1/projects/ubuntu-os-cloud/global/images/family/ubuntu-1604-lts \
+    --google-machine-type n1-standard-1 \
+    --google-zone europe-west1-b \
+    docker-host
+
+# Настроить докер клиент на удаленный докер демон
+eval $(docker-machine env docker-host)
+
+# Переключение на локальный докер
+eval $(docker-machine env --unset)
+
+$ docker-machine ip docker-host
+
+$ docker-machine rm docker-host
+
