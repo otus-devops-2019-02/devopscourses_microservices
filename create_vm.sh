@@ -5,4 +5,5 @@ docker-machine create --driver google \
 --google-machine-type n1-standard-1 \
 --google-disk-size 60 \
 --google-zone europe-west1-d \
-gitlab-ci
+docker-host
+
