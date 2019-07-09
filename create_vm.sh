@@ -6,4 +6,3 @@ docker-machine create --driver google \
 --google-disk-size 60 \
 --google-zone europe-west1-d \
 docker-host
-
