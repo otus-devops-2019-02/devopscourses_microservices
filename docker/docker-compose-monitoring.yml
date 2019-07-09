@@ -9,7 +9,7 @@ networks:
 
 services:
   prometheus:
-    image: ${USERNAME}/prometheus
+    image: ${USER_NAME}/prometheus
     container_name: prometheus
     restart: always
     networks:
