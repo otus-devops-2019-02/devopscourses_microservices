@@ -1,0 +1,66 @@
+version: "3.3"
+
+volumes:
+  reddit-db:
+  prometheus_data:
+
+networks:
+  reddit:
+  promit-net:
+
+services:
+  post-db:
+    image: mongo:3.2
+    container_name: post-db
+    restart: always
+    networks:
+      promit-net:
+        aliases:
+          - post_db
+          - comment_db
+      reddit:
+        aliases:
+          - post_db
+          - comment_db
+    volumes:
+      - ./reddit-db:/data/db
+
+  post:
+    image: ${USERNAME}/post:${POST_VERSION}
+    container_name: post
+    restart: always
+    networks:
+      promit-net:
+        aliases:
+          - post
+      reddit:
+        aliases:
+          - post
+
+  comment:
+    image: ${USERNAME}/comment:${COMMENT_VERSION}
+    container_name: comment
+    restart: always
+    networks:
+      promit-net:
+        aliases:
+          - comment
+      reddit:
+        aliases:
+          - comment
+
+  ui:
+    image: ${USERNAME}/ui:${UI_VERSION}
+    container_name: ui
+    restart: always
+    networks:
+      promit-net:
+        aliases:
+          - ui
+      reddit:
+        aliases:
+          - ui
+    ports:
+      - 9292:9292
+
+
