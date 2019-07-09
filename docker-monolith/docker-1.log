@@ -1,8 +1,0 @@
-REPOSITORY                      TAG                 IMAGE ID            CREATED              SIZE
-devopscourses/ubuntu-tmp-file   latest              26397fbf3226        About a minute ago   119MB
-ubuntu                          16.04               2a697363a870        11 hours ago         119MB
-<none>                          <none>              9518e0dc3325        2 months ago         313MB
-<none>                          <none>              655dbc01ce84        2 months ago         342MB
-<none>                          <none>              55a0e4538105        2 months ago         233MB
-<none>                          <none>              74017afa5444        2 months ago         329MB
-hello-world                     latest              fce289e99eb9        4 months ago         1.84kB
