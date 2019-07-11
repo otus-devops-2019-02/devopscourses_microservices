@@ -1,6 +1,6 @@
 FROM alpine:latest
 RUN apk update && apk add ruby-full ruby-dev build-base ruby-bundler && \
-    gem install bundler --no-ri --no-rdoc 
+    gem install bundler --no-ri --no-rdoc
 
 ENV APP_HOME /app
 RUN mkdir $APP_HOME
