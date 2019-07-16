@@ -370,5 +370,23 @@ docker-compose -f docker-compose.yml -f docker-compose-logging.yml up -d
 •	Заходим в UI zipkin. http://34.77.53.138:9411/zipkin/
 
 
+Lesson-25 HW kubernetes-1
+ 
+-  Выполенен  туториал Kubernetes The Hard Way [https://github.com/kelseyhightower/kubernetes-the-hard-way]
+- проверка создания подов 
+for pod in comment mongo post ui; do \
+ kubectl apply -f ../reddit/$pod-deployment.yml
+done;
+- 
+NAME                                  READY   STATUS             RESTARTS   AGE
+busybox-bd8fb7cbd-ffqjw               1/1     Running            0          39m
+comment-deployment-5bfc574bb8-j7h72   1/1     Running            0          55s
+mongo-deployment-78c45675cb-b48pt     0/1     ImagePullBackOff   0          54s
+nginx-dbddb74b8-g5sl2                 1/1     Running            0          26m
+post-deployment-6457776f46-7h2g9      1/1     Running            0          53s
+ui-deployment-5c545f6c58-hgnp6        1/1     Running            0          52s
+untrusted                             1/1     Running            0          9m36s
+- Cleaning Up
+
 
 
