@@ -1,6 +1,6 @@
 FROM debian:stretch
 RUN apt-get update \
-    && apt-get install -y ruby-full ruby-dev build-essential \
+    && apt-get install -y ruby-full ruby-dev build-essential dnsutils \
     && gem install bundler --no-ri --no-rdoc
 
 ENV APP_HOME /app
