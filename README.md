@@ -798,3 +798,377 @@ kubectl describe service ui -n dev | grep NodePort
 •	Необходимо Service Account назначить роль с достаточными правами на просмотр информации о кластере В кластере уже есть объект ClusterRole с названием cluster-admin. Тот, кому назначена эта роль имеет полный доступ ко всем объектам кластера
 •	Добавляем
 
+
+Kubernetes. Networks. Storages.
+Load balancer.
+•	Настраиваем  Service UI:
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ui
+  labels:
+    app: reddit
+    component: ui
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    nodePort: 32092
+    protocol: TCP
+    targetPort: 9292
+  selector:
+    app: reddit
+    component: ui
+•	Применяем изменения kubectl apply -f ui-service.yml -n dev
+•	Преверяем kubectl get service -n dev --selector component=ui
+Ingress
+•	Google в GKE уже предоставляет возможность использовать собственные решения балансирощика в качестве Ingress controller-в. Перейдите в настройки кластера раздел Дополнения(add-ons) в веб-консоли gcloud. Убедитесь, что встроенный Ingress включен
+•	Создаем Ingress для сервиса UI
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: ui
+spec:
+  backend:
+    serviceName: ui
+    servicePort: 80
+•	Применяем kubectl apply -f ui-ingress.yml -n dev.
+•	В gke балансировщиках нагрузки появились несколько правил
+•	Прверяем: ]#  kubectl get ingress -n dev
+NAME   HOSTS   ADDRESS          PORTS     AGE
+ui     *       35.227.214.254   80, 443   6m55s
+•	Через некоторое время проверяем: http://35.227.214.254/
+•	Достаточно одного балансировщика. Обновляем сервис для UI.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ui
+  labels:
+    app: reddit
+    component: ui
+spec:
+  type: NodePort
+  ports:
+  - port: 9292
+    nodePort: 32092
+    protocol: TCP
+    targetPort: 9292
+  selector:
+    app: reddit
+    component: ui
+•	Применяем kubectl apply -f ui-service.yml -n dev
+•	Настраиваем Ingress Controller для работы как классический веб ui-ingress.yml:
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: ui
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /*
+        backend:
+          serviceName: ui
+          servicePort: 9292
+•	Применяем kubectl apply -f ui-ingress.yml -n dev
+•	Через некоторое время проверяем:  http://35.227.214.254/
+Secret
+•	Защищаем сервис с помощью TLS.
+•	Подготавливаем сертификат используя IP как CN.
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout tls.key -out tls.crt -subj "/CN=35.227.214.254"
+•	Загружаем сертификат в кластер kubernetes.
+kubectl create secret tls ui-ingress --key tls.key --cert tls.crt -n dev
+•	Проверяем командой kubectl describe secret ui-ingress -n dev.
+Name:         ui-ingress
+Namespace:    dev
+Labels:       <none>
+Annotations:  <none>
+Type:  kubernetes.io/tls
+Data
+====
+tls.crt:  1127 bytes
+tls.key:  1704 bytes
+•	TLS Termination. Настраиваем Ingress на прием только HTTPS траффика. ui-ingress.yml:
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: ui
+  annotations:
+    kubernetes.io/ingress.allow-http: "false"
+spec:
+  tls:
+  - secretName: ui-ingress
+  backend:
+    serviceName: ui
+    servicePort: 9292
+•	Применим kubectl apply -f ui-ingress.yml -n dev.
+•	Через некоторое время проверяем:  http://35.227.214.254/
+
+Network Policy
+### Ограничения не работают для типа  1-micro or g1-small instances , только для standart
+•	Найдите имя кластера gcloud beta container clusters list
+•	Включаем network-policy для GKE.
+gcloud beta container clusters update standard-cluster-1  --zone=us-central1-a --update-addons=NetworkPolicy=ENABLED
+gcloud beta container clusters update standard-cluster-1  --zone=us-central1-a  --enable-network-policy
+
+•	mongo-network-policy.yml:
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-db-traffic
+  labels:
+    app: reddit
+spec:
+  podSelector:
+    matchLabels:
+      app: reddit
+      component: mongo
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: reddit
+          component: comment
+•	Применяем политику kubectl apply -f mongo-network-policy.yml -n dev
+•	Проверяем kubectl -n dev get networkpolicy
+
+Хранилище для базы
+•	Обновляем mongo-deployment.yml:
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: mongo
+  labels:
+    app: reddit
+    component: mongo
+    post-db: "true"
+    comment-db: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reddit
+      component: mongo
+  template:
+    metadata:
+      name: mongo
+      labels:
+        app: reddit
+        component: mongo
+        post-db: "true"
+        comment-db: "true"
+    spec:
+      containers:
+      - image: mongo:3.2
+        name: mongo
+        volumeMounts:
+        - name: mongo-persistent-storage
+          mountPath: /data/db
+      volumes:
+      - name: mongo-persistent-storage
+        emptyDir: {}
+•	Применили kubectl apply -f mongo-deployment.yml -n dev
+•	Создаем диск в Google Cloud.
+gcloud compute disks create --size=25GB --zone=us-central1-a reddit-mongo-disk
+•	Добавляем новый Volume POD-у базы.
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: mongo
+  labels:
+    app: reddit
+    component: mongo
+    post-db: "true"
+    comment-db: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reddit
+      component: mongo
+  template:
+    metadata:
+      name: mongo
+      labels:
+        app: reddit
+        component: mongo
+        post-db: "true"
+        comment-db: "true"
+    spec:
+      containers:
+      - image: mongo:3.2
+        name: mongo
+        volumeMounts:
+        - name: mongo-gce-pd-storage
+          mountPath: /data/db
+      volumes:
+      - name: mongo-persistent-storage
+        emptyDir: {}
+        volumes:
+      - name: mongo-gce-pd-storage
+        gcePersistentDisk:
+          pdName: reddit-mongo-disk
+          fsType: ext4
+•	Монтируем выделенный диск к POD’у mongo kubectl apply -f mongo-deployment.yml -n dev.
+•	Пересоздание  Pod'а (занимает значительное время ~10-15 минут) 
+•	После пересоздания mongo, посты сохранены.
+PersistentVolume
+•	Создаем описание PersistentVolume mongo-volume.yml.
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: reddit-mongo-disk
+spec:
+  capacity:
+    storage: 25Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  gcePersistentDisk:
+    fsType: "ext4" 
+    pdName: "reddit-mongo-disk"
+•	Добавляем PersistentVolume в кластер kubectl apply -f mongo-volume.yml -n dev
+•	Создаем описание PersistentVolumeClaim (PVC) mongo-claim.yml:
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: mongo-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 15Gi
+•	Добавляем PersistentVolumeClaim в кластер kubectl apply -f mongo-claim.yml -n dev
+•	Проверяем kubectl -n dev get pv
+•	Одновременно использовать один PV можно только по одному Claim’у. Если Claim не найдет по заданным параметрам PV внутри кластера, либо тот будет занят другим Claim’ом то он сам создаст нужный ему PV воспользовавшись стандартным StorageClass. kubectl describe storageclass standard -n dev
+Name:                  standard
+IsDefaultClass:        Yes
+Annotations:           storageclass.beta.kubernetes.io/is-default-class=true
+Provisioner:           kubernetes.io/gce-pd
+Parameters:            type=pd-standard
+AllowVolumeExpansion:  <unset>
+MountOptions:          <none>
+ReclaimPolicy:         Delete
+VolumeBindingMode:     Immediate
+Events:                <none>
+•	Подключим PVC к нашим Pod'ам.
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: mongo
+  labels:
+    app: reddit
+    component: mongo
+    post-db: "true"
+    comment-db: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reddit
+      component: mongo
+  template:
+    metadata:
+      name: mongo
+      labels:
+        app: reddit
+        component: mongo
+        post-db: "true"
+        comment-db: "true"
+    spec:
+      containers:
+      - image: mongo:3.2
+        name: mongo
+        volumeMounts:
+        - name: mongo-gce-pd-storage
+          mountPath: /data/db
+      volumes:
+      - name: mongo-gce-pd-storage
+        persistentVolumeClaim:
+          claimName: mongo-pvc
+•	Обновляем описание нашего Deployment’а kubectl apply -f mongo-deployment.yml -n dev
+Динамическое выделение Volume'ов
+•	Но гораздо интереснее создавать хранилища при необходимости и в автоматическом режиме. В этом нам помогут StorageClass’ы. Они описывают где (какой провайдер) и какие хранилища создаются.
+•	Создадим описание StorageClass’а storage-fast.yml:
+---
+kind: StorageClass
+apiVersion: storage.k8s.io/v1beta1
+metadata:
+  name: fast
+provisioner: kubernetes.io/gce-pd
+parameters:
+  type: pd-ssd
+•	Добавим StorageClass в кластер kubectl apply -f storage-fast.yml -n dev
+•	Проверим kubectl -n dev get sc
+•	PVC + StorageClass. Создадим описание PersistentVolumeClaim. mongo-claim-dynamic.yml:
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: mongo-pvc-dynamic
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: fast
+  resources:
+    requests:
+      storage: 10Gi
+•	Добавим StorageClass в кластер kubectl apply -f mongo-claim-dynamic.yml -n dev
+•	Подключим PVC к нашим Pod'ам mongo-deployment.yml:
+---
+apiVersion: apps/v1beta1
+kind: Deployment
+metadata:
+  name: mongo
+  labels:
+    app: reddit
+    component: mongo
+    post-db: "true"
+    comment-db: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reddit
+      component: mongo
+  template:
+    metadata:
+      name: mongo
+      labels:
+        app: reddit
+        component: mongo
+        post-db: "true"
+        comment-db: "true"
+    spec:
+      containers:
+      - image: mongo:3.2
+        name: mongo
+        volumeMounts:
+        - name: mongo-gce-pd-storage
+          mountPath: /data/db
+      volumes:
+      - name: mongo-gce-pd-storage
+        persistentVolumeClaim:
+          claimName: mongo-pvc-dynamic
+•	Обновим описание нашего Deployment'а kubectl apply -f mongo-deployment.yml -n dev
+•	Проверяем kubectl -n dev get pv
+NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM                   STORAGECLASS   REASON   AGE
+pvc-8a633b8b-adf0-11e9-82f3-42010a800100   10Gi       RWO            Delete           Bound       dev/mongo-pvc-dynamic   fast                    57s
+pvc-ff4196ea-adee-11e9-82f3-42010a800100   15Gi       RWO            Delete           Bound       dev/mongo-pvc           standard                12m
+reddit-mongo-disk                          25Gi       RWO            Retain           Available                                                   14m
+
+
