@@ -1,0 +1,7 @@
+name: comment
+version: 1.0.0
+description: OTUS reddit application COMMENT
+maintainers:
+  - name: devopscourses
+    email: skydevapp@gmail.com
+appVersion: 1.0
