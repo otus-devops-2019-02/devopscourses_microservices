@@ -1,0 +1,20 @@
+comment:
+  image:
+    repository: devopscourses/comment
+    tag: latest
+  service:
+    externalPort: 9292
+
+post:
+  image:
+    repository: devopscourses/post
+    tag: latest
+    service:
+      externalPort: 5000
+
+ui:
+  image:
+    repository: devopscourses/ui
+    tag: latest
+    service:
+      externalPort: 9292
