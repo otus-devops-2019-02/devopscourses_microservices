@@ -2509,3 +2509,82 @@ image: alpine:latest
 
 EOF
 
+Мониторинг
+Установим Prometheus
+•	Загрузим prometheus локально в Charts каталог
+cd kubernetes/Charts && helm fetch —-untar stable/prometheus
+•	Создайте внутри директории чарта файл
+ wget 'https://gist.githubusercontent.com/chromko/2bd290f7becdf707cde836ba1ea6ec5c/raw/c17372866867607cf4a0445eb519f9c2c377a0ba/gistfile1.txt' -O custom_values.yaml
+•	Запустите Prometheus в k8s из Charsts/prometheus
+helm upgrade prom . -f custom_values.yaml --install
+•	Заходим http://reddit-prometheus
+•	Отметим, что можно собирать метрики cadvisor’а (который уже является частью kubelet) через проксирующий запрос в kube-api-server.
+•	Если зайти по ssh на любую из машин кластера и запросить curl http://localhost:4194/metrics то получим те же метрики у kubelet напрямую.
+•	Но вариант с kube-api предпочтительней, т.к. этот трафик шифруется TLS и требует аутентификации.
+•	Все найденные на эндпоинтах метрики сразу же отобразятся в списке (вкладка Graph). Метрики Cadvisor начинаются с container_.
+•	Cadvisor собирает лишь информацию о потреблении ресурсов и производительности отдельных docker-контейнеров. При этом он ничего не знает о сущностях k8s (деплойменты, репликасеты, …).
+•	Для сбора этой информации будем использовать сервис kube-state-metrics. Он входит в чарт Prometheus. Включим его.
+prometheus/custom_values.yml:
+kubeStateMetrics:
+  ## If false, kube-state-metrics will not be installed
+  ##
+  enabled: true
+•	Обновим релиз helm upgrade prom . -f custom_values.yaml --install
+•	В Target Prometheus появился kubernetes-service-endpoints component="kube-state-metrics". А в Graph появился kube_deployment_metadata_generation.
+•	По аналогии с kube_state_metrics включите (enabled: true) поды node-exporter в custom_values.yml.
+prometheus/custom_values.yml:
+nodeExporter:
+  ## If false, node-exporter will not be installed
+  ##
+  enabled: true
+•	Обновим релиз helm upgrade prom . -f custom_values.yaml --install
+•	В Target Prometheus появился kubernetes-service-endpoints component="node-exporter". А в Graph появился node_exporter_build_info.
+Метрики приложений
+•	Запустите приложение из helm чарта reddit
+helm upgrade reddit-test ./reddit --install
+helm upgrade production --namespace production ./reddit --install
+helm upgrade staging --namespace staging ./reddit --install
+•	Раньше мы “хардкодили” адреса/dns-имена наших приложений для сбора метрик с них. Теперь мы можем использовать механизм ServiceDiscovery для обнаружения приложений, запущенных в k8s. Используем действие keep, чтобы оставить только эндпоинты сервисов с метками “app=reddit”
+•	Модернизируем конфиг prometheus custom_values.yml
+- job_name: 'reddit-endpoints'
+  kubernetes_sd_configs:
+    - role: endpoints
+  relabel_configs:
+    - source_labels: [__meta_kubernetes_service_label_app]
+      action: keep
+      regex: reddit
+•	Обновим релиз helm upgrade prom . -f custom_values.yaml --install
+•	Мы получили эндпоинты, но что это за поды мы не знаем. Добавим метки k8s Все лейблы и аннотации k8s изначально отображаются в prometheus в формате:
+__meta_kubernetes_service_label_labelname
+__meta_kubernetes_service_annotation_annotationname
+•	Изменим custom_values.yml
+      relabel_configs:
+        - action: labelmap
+          regex: __meta_kubernetes_service_label_(.+)
+•	Сейчас мы собираем метрики со всех сервисов reddit’а в 1 группе target-ов. Мы можем отделить target-ы компонент друг от друга (по окружениям, по самим компонентам), а также выключать и включать опцию мониторинга для них с помощью все тех же labelов.
+•	Например, добавим в конфиг еще 1 job.
+      - job_name: 'reddit-production'
+        kubernetes_sd_configs:
+          - role: endpoints
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_service_label_(.+)
+          - source_labels: [__meta_kubernetes_service_label_app, __meta_kubernetes_namespace]
+            action: keep
+            regex: reddit;(production|staging)+
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_service_name]
+            target_label: kubernetes_name
+•	Обновим релиз helm upgrade prom . -f custom_values.yaml --install
+•	В Target Prometheus появился reddit-production (15/15 up)
+•	Метрики будут отображаться для всех инстансов приложений в Graph ui_health_post_availability.
+•	Разбейте конфигурацию job’а reddit-endpoints (слайд 24) так, чтобы было 3 job’а для каждой из компонент приложений (post-endpoints, commentendpoints, ui-endpoints), а reddit-endpoints уберите.
+Визуализация
+•	Поставим также grafana с помощью helm в папку Charts.
+helm upgrade --install grafana stable/grafana --set "server.adminPassword=admin" \
+--set "server.service.type=NodePort" \
+--set "server.ingress.enabled=true" \
+--set "server.ingress.hosts={reddit-grafana}"
+•	Заходим http://reddit-grafana/
+
